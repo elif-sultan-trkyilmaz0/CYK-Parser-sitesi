@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pembe CYK Parser</title>
+  <style>
+    * { box-sizing: border-box; font-family: "Segoe UI", Arial, sans-serif; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(135deg, #ffe0ec, #ffd1e3, #fff5fa);
+      color: #4a1833;
+    }
+    .container { max-width: 1150px; margin: 0 auto; padding: 35px 20px; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .header h1 { margin: 0; font-size: 42px; color: #b51663; }
+    .header p { font-size: 17px; color: #7a3052; }
+    .card {
+      background: rgba(255,255,255,0.88); border-radius: 24px; padding: 25px;
+      margin-bottom: 25px; box-shadow: 0 10px 30px rgba(181,22,99,0.18);
+      border: 1px solid #ffc1dc;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+    label { font-weight: 800; color: #9c1558; display: block; margin-bottom: 8px; }
+    textarea, input {
+      width: 100%; border: 2px solid #f5a6cb; border-radius: 16px; padding: 14px;
+      font-size: 15px; outline: none; background: #fff7fb; color: #4a1833;
+    }
+    textarea:focus, input:focus { border-color: #d81b73; box-shadow: 0 0 0 4px rgba(216,27,115,0.12); }
+    textarea { min-height: 230px; resize: vertical; line-height: 1.5; }
+    .file-box {
+      background: #fff7fb; border: 2px dashed #f5a6cb; border-radius: 18px;
+      padding: 16px; margin-bottom: 15px;
+    }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+    button {
+      border: none; border-radius: 999px; padding: 13px 22px; font-weight: 800;
+      cursor: pointer; transition: 0.2s; font-size: 15px;
+    }
+    .primary { background: #d81b73; color: white; }
+    .primary:hover { background: #b51663; transform: translateY(-2px); }
+    .secondary { background: #ffe3f0; color: #9c1558; border: 1px solid #f5a6cb; }
+    .secondary:hover { background: #ffd1e3; }
+    .result {
+      text-align: center; padding: 18px; border-radius: 18px; font-size: 24px;
+      font-weight: 900; margin-top: 15px; display: none;
+    }
+    .accepted { background: #e9fff1; color: #167a3a; border: 2px solid #7ee0a1; }
+    .rejected { background: #fff0f5; color: #c2185b; border: 2px solid #f48fb1; }
+    .table-wrapper { overflow-x: auto; padding-bottom: 10px; }
+    table { border-collapse: separate; border-spacing: 8px; margin: 0 auto; }
+    td {
+      min-width: 115px; height: 70px; background: #fff7fb; border: 2px solid #f5a6cb;
+      border-radius: 16px; text-align: center; vertical-align: middle; font-weight: 800;
+      color: #7a3052; padding: 8px;
+    }
+    td.empty { background: transparent; border: none; }
+    td.filled { background: #ffe3f0; color: #b51663; }
+    .steps {
+      max-height: 300px; overflow-y: auto; background: #fff7fb; border: 2px dashed #f5a6cb;
+      border-radius: 18px; padding: 15px; line-height: 1.7;
+    }
+    .note {
+      background: #fff0f7; padding: 14px; border-left: 5px solid #d81b73;
+      border-radius: 12px; color: #7a3052; margin-top: 15px;
+    }
+    code { background: #ffe3f0; padding: 2px 6px; border-radius: 7px; }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+      .header h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CYK Parser</h1>
+      <p>CNF grameri .txt veya .json dosyasından okuyup CYK algoritması ile kelime kabul/red analizi yapar.</p>
+    </div>
+
+    <div class="card grid">
+      <div>
+        <label>CNF Gramer Dosyası Yükle</label>
+        <div class="file-box">
+          <input type="file" id="fileInput" accept=".txt,.json" onchange="loadGrammarFile(event)" />
+          <div class="note">
+            <b>.txt formatı:</b><br>
+            <code>S-&gt;AB|BC</code><br>
+            <code>A-&gt;BA|a</code><br><br>
+            <b>.json formatı:</b><br>
+            <code>{"S":["AB","BC"],"A":["BA","a"]}</code>
+          </div>
+        </div>
+
+        <label>Dosyadan Okunan Gramer</label>
+        <textarea id="grammarInput" readonly>Henüz dosya yüklenmedi.</textarea>
+      </div>
+
+      <div>
+        <label>Girdi Kelimesi</label>
+        <input id="wordInput" value="baaba" placeholder="Örnek: baaba" />
+
+        <div class="btn-row">
+          <button class="primary" onclick="runCYK()">CYK Çalıştır</button>
+          <button class="secondary" onclick="downloadTxtExample()">Örnek TXT İndir</button>
+          <button class="secondary" onclick="downloadJsonExample()">Örnek JSON İndir</button>
+          <button class="secondary" onclick="clearAll()">Temizle</button>
+        </div>
+
+        <div id="result" class="result"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>CYK Tablosu</label>
+      <div id="tableArea" class="table-wrapper"></div>
+    </div>
+
+    <div class="card">
+      <label>Adım Adım İşlem Açıklaması</label>
+      <div id="steps" class="steps">Henüz işlem yapılmadı.</div>
+    </div>
+  </div>
+
+  <script>
+    let loadedGrammar = null;
+
+    function loadGrammarFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const content = e.target.result;
+        const fileName = file.name.toLowerCase();
+
+        try {
+          if (fileName.endsWith(".json")) {
+            loadedGrammar = parseJsonGrammar(content);
+          } else if (fileName.endsWith(".txt")) {
+            loadedGrammar = parseTxtGrammar(content);
+          } else {
+            throw new Error("Sadece .txt veya .json dosyası yüklenebilir.");
+          }
+
+          document.getElementById("grammarInput").value = grammarToText(loadedGrammar);
+          document.getElementById("steps").innerHTML = "Gramer dosyası başarıyla yüklendi. Şimdi kelime girip CYK Çalıştır butonuna basabilirsin.";
+        } catch (error) {
+          loadedGrammar = null;
+          alert("Dosya okunamadı: " + error.message);
+        }
+      };
+
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function parseTxtGrammar(text) {
+      const grammar = {};
+      const lines = text.split("\n");
+
+      for (let line of lines) {
+        line = line.trim();
+        if (line === "") continue;
+
+        if (!line.includes("->")) throw new Error("Hatalı satır: " + line);
+
+        const [leftRaw, rightRaw] = line.split("->");
+        const left = leftRaw.trim();
+        const rights = rightRaw.split("|").map(x => x.trim()).filter(x => x !== "");
+
+        if (!left || rights.length === 0) throw new Error("Eksik kural: " + line);
+        if (!grammar[left]) grammar[left] = [];
+        grammar[left].push(...rights);
+      }
+
+      validateCNF(grammar);
+      return grammar;
+    }
+
+    function parseJsonGrammar(text) {
+      const grammar = JSON.parse(text);
+
+      if (typeof grammar !== "object" || Array.isArray(grammar) || grammar === null) {
+        throw new Error("JSON gramer obje şeklinde olmalı.");
+      }
+
+      for (const key in grammar) {
+        if (!Array.isArray(grammar[key])) {
+          throw new Error(key + " için kurallar dizi olmalı. Örnek: \"S\": [\"AB\", \"BC\"]");
+        }
+      }
+
+      validateCNF(grammar);
+      return grammar;
+    }
+
+    function validateCNF(grammar) {
+      for (const variable in grammar) {
+        for (const rule of grammar[variable]) {
+          const isTerminalRule = /^[a-z]$/.test(rule);
+          const isVariableRule = /^[A-Z][A-Z]$/.test(rule);
+
+          if (!isTerminalRule && !isVariableRule) {
+            throw new Error(rule + " CNF formatına uygun değil. Kural ya tek küçük harf ya da iki büyük harf olmalı.");
+          }
+        }
+      }
+    }
+
+    function grammarToText(grammar) {
+      let text = "";
+      for (const variable in grammar) {
+        text += variable + " -> " + grammar[variable].join(" | ") + "\n";
+      }
+      return text.trim();
+    }
+
+    function findVariables(grammar, production) {
+      const result = [];
+      for (const variable in grammar) {
+        for (const rule of grammar[variable]) {
+          if (rule === production) result.push(variable);
+        }
+      }
+      return result;
+    }
+
+    function runCYK() {
+      const word = document.getElementById("wordInput").value.trim();
+      const resultBox = document.getElementById("result");
+      const stepsBox = document.getElementById("steps");
+      const tableArea = document.getElementById("tableArea");
+
+      resultBox.style.display = "none";
+      stepsBox.innerHTML = "";
+      tableArea.innerHTML = "";
+
+      if (!loadedGrammar) {
+        alert("Önce .txt veya .json gramer dosyası yüklemelisin.");
+        return;
+      }
+
+      if (word.length === 0) {
+        alert("Lütfen bir kelime gir.");
+        return;
+      }
+
+      const grammar = loadedGrammar;
+      const n = word.length;
+      const table = Array.from({ length: n }, () => Array.from({ length: n }, () => new Set()));
+      const steps = [];
+      const failDetails = [];
+
+      steps.push("1) Dosyadan CNF gramer okundu.");
+      steps.push("2) CYK tablosunun ilk köşegeni doldurulur. Bu kısımda kelimedeki tek harflerin hangi değişkenlerden üretilebildiğine bakılır.");
+
+      for (let i = 0; i < n; i++) {
+        const char = word[i];
+        const variables = findVariables(grammar, char);
+        variables.forEach(v => table[i][i].add(v));
+
+        if (variables.length > 0) {
+          steps.push(`Kelimenin ${i + 1}. karakteri '${char}' için bulunan değişkenler: {${variables.join(", ")}}`);
+        } else {
+          steps.push(`Kelimenin ${i + 1}. karakteri '${char}' için hiçbir değişken bulunamadı. Bu karakter gramer tarafından doğrudan üretilemiyor.`);
+          failDetails.push(`'${char}' karakterini üreten bir kural yok. Örneğin A->${char} gibi bir kural bulunamadı.`);
+        }
+      }
+
+      steps.push("3) Sonra uzunluğu 2, 3, 4 ... olan alt kelimeler sırayla incelenir.");
+      steps.push("4) Her alt kelime farklı bölme noktalarından iki parçaya ayrılır. Sol parçadaki değişkenler ile sağ parçadaki değişkenler birleştirilir.");
+
+      for (let length = 2; length <= n; length++) {
+        for (let i = 0; i <= n - length; i++) {
+          const j = i + length - 1;
+          const substring = word.substring(i, j + 1);
+          let foundForThisCell = false;
+          let triedCombinations = [];
+
+          steps.push(`<hr><b>'${substring}'</b> alt kelimesi inceleniyor.`);
+
+          for (let k = i; k < j; k++) {
+            const leftSubstring = word.substring(i, k + 1);
+            const rightSubstring = word.substring(k + 1, j + 1);
+            const leftSet = table[i][k];
+            const rightSet = table[k + 1][j];
+
+            steps.push(`Bölme noktası: '${substring}' = '${leftSubstring}' + '${rightSubstring}'`);
+            steps.push(`Sol hücre {${Array.from(leftSet).join(", ") || "∅"}}, sağ hücre {${Array.from(rightSet).join(", ") || "∅"}}`);
+
+            if (leftSet.size === 0 || rightSet.size === 0) {
+              steps.push("Bu bölmede işlem yapılamadı çünkü sol veya sağ tarafta değişken yok.");
+              continue;
+            }
+
+            for (const leftVar of leftSet) {
+              for (const rightVar of rightSet) {
+                const combination = leftVar + rightVar;
+                triedCombinations.push(combination);
+                const variables = findVariables(grammar, combination);
+                variables.forEach(v => table[i][j].add(v));
+
+                if (variables.length > 0) {
+                  foundForThisCell = true;
+                  steps.push(`${leftVar} + ${rightVar} = ${combination}. Gramerde ${variables.join(", ")} -> ${combination} kuralı bulundu. Bu yüzden hücreye {${variables.join(", ")}} eklendi.`);
+                } else {
+                  steps.push(`${leftVar} + ${rightVar} = ${combination}. Gramerde bu birleşimi üreten kural yok.`);
+                }
+              }
+            }
+          }
+
+          const cellResult = Array.from(table[i][j]).join(", ") || "∅";
+          steps.push(`<b>'${substring}' için hücre sonucu: {${cellResult}}</b>`);
+
+          if (!foundForThisCell && table[i][j].size === 0) {
+            const triedText = triedCombinations.length > 0 ? triedCombinations.join(", ") : "hiç kombinasyon oluşmadı";
+            failDetails.push(`'${substring}' alt kelimesi üretilemedi. Denenen birleşimler: ${triedText}. Bu birleşimleri üreten uygun CNF kuralı bulunamadı.`);
+          }
+        }
+      }
+
+      drawTable(table, word);
+
+      const finalCell = table[0][n - 1];
+      const finalCellText = Array.from(finalCell).join(", ") || "∅";
+      const accepted = finalCell.has("S");
+      resultBox.style.display = "block";
+
+      steps.push("<hr><b>SON KONTROL</b>");
+      steps.push(`Tüm kelime '${word}' için en üst hücreye bakılır.`);
+      steps.push(`En üst hücre sonucu: {${finalCellText}}`);
+
+      if (accepted) {
+        resultBox.className = "result accepted";
+        resultBox.innerHTML = "SONUÇ: KABUL ✅<br>Başlangıç sembolü S en üst hücrede bulundu.";
+        steps.push("Başlangıç sembolü S bu hücrede olduğu için kelime bu gramer tarafından üretilebilir.");
+      } else {
+        resultBox.className = "result rejected";
+        resultBox.innerHTML = "SONUÇ: RED ❌<br>Başlangıç sembolü S en üst hücrede bulunamadı.<br><small>Aşağıda neden kabul edilmediği adım adım gösterildi.</small>";
+
+        steps.push("Başlangıç sembolü S en üst hücrede olmadığı için kelime bu gramer tarafından üretilemez.");
+        steps.push("<hr><b>NEDEN RED OLDU?</b>");
+
+        if (finalCell.size === 0) {
+          steps.push(`Tüm kelime '${word}' için hiçbir değişken üretilemedi. Yani gramer bu kelimenin tamamını oluşturamıyor.`);
+        } else {
+          steps.push(`Tüm kelime '${word}' için bazı değişkenler üretildi: {${finalCellText}}. Ancak bunların içinde başlangıç sembolü S yok.`);
+          steps.push("CYK algoritmasında kabul için en üst hücrede mutlaka S olmalıdır. Başka değişkenlerin olması tek başına yeterli değildir.");
+        }
+
+        steps.push("<b>Detaylı başarısızlık nedenleri:</b>");
+        if (failDetails.length === 0) {
+          steps.push("Alt kelimelerden bazıları üretilebilmiş olsa bile, bunlar başlangıç sembolü S'ye kadar birleşemedi.");
+        } else {
+          const uniqueFails = [...new Set(failDetails)];
+          uniqueFails.forEach((detail, index) => {
+            steps.push(`${index + 1}) ${detail}`);
+          });
+        }
+
+        steps.push("<b>Özet:</b> Kelimenin kabul edilmemesinin sebebi, CYK tablosunun son hücresinde S sembolünün oluşmamasıdır. Bu da gramer kurallarının verilen kelimeyi başlangıç sembolünden türetemediği anlamına gelir.");
+      }
+
+      stepsBox.innerHTML = steps.map(s => `<div>• ${s}</div>`).join("");
+    }
+
+    function drawTable(table, word) {
+      const n = word.length;
+      const tableArea = document.getElementById("tableArea");
+      const htmlTable = document.createElement("table");
+
+      for (let row = 0; row < n; row++) {
+        const tr = document.createElement("tr");
+
+        for (let col = 0; col < n; col++) {
+          const td = document.createElement("td");
+
+          if (col < row) {
+            td.className = "empty";
+          } else {
+            const content = Array.from(table[row][col]).join(", ") || "∅";
+            td.innerHTML = content;
+            td.className = content === "∅" ? "" : "filled";
+          }
+
+          tr.appendChild(td);
+        }
+
+        htmlTable.appendChild(tr);
+      }
+
+      tableArea.appendChild(htmlTable);
+    }
+
+    function downloadFile(fileName, content) {
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function downloadTxtExample() {
+      const content = `S->AB|BC
+A->BA|a
+B->CC|b
+C->AB|a`;
+      downloadFile("grammar.txt", content);
+    }
+
+    function downloadJsonExample() {
+      const content = `{
+  "S": ["AB", "BC"],
+  "A": ["BA", "a"],
+  "B": ["CC", "b"],
+  "C": ["AB", "a"]
+}`;
+      downloadFile("grammar.json", content);
+    }
+
+    function clearAll() {
+      loadedGrammar = null;
+      document.getElementById("fileInput").value = "";
+      document.getElementById("grammarInput").value = "Henüz dosya yüklenmedi.";
+      document.getElementById("wordInput").value = "";
+      document.getElementById("result").style.display = "none";
+      document.getElementById("tableArea").innerHTML = "";
+      document.getElementById("steps").innerHTML = "Henüz işlem yapılmadı.";
+    }
+  </script>
+</body>
+</html>
+
+
